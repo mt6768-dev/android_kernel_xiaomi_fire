@@ -568,7 +568,7 @@
 };
 /*fingerprint end*/
 
-#include <fire/cust.dtsi>
+#include "mediatek/fire/cust.dtsi"
 #include "mediatek/cust_mt6768_camera.dtsi"
 #include "mediatek/cust_mt6768_touch_1080x2460.dtsi"
 #include "mediatek/mt6885-sia8152s.dtsi"
