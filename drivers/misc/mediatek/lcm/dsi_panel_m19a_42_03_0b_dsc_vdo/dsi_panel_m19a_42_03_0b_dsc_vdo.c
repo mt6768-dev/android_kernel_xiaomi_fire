@@ -479,7 +479,7 @@ static void lcm_resume_power(void)
 }
 
 extern int fts_resume(void);
-extern fts_fwresume_work(void);
+extern int fts_fwresume_work(void);
 static void lcm_init(void)
 {
 	MDELAY(2);

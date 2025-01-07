@@ -1477,7 +1477,7 @@ int fts_remove_sysfs(struct fts_ts_data *ts_data)
     return 0;
 }
 
-int fts_factory_test()
+int fts_factory_test(void)
 {
     int ret = 0;
     char fwname[FILE_NAME_LENGTH] = { "focaltech_ft8720_hx.ini" };
