@@ -218,7 +218,7 @@ static void write_cmos_sensor(kal_uint32 addr, kal_uint32 para)
 
 }
 
-static void set_dummy()
+static void set_dummy(void)
 {
    
 	LOG_INF("dummyline = %d, dummypixels = %d \n", imgsensor.dummy_line, imgsensor.dummy_pixel);
@@ -231,7 +231,7 @@ static void set_dummy()
 //  end
 }    /*    set_dummy  */
 
-static kal_uint32 return_sensor_id()
+static kal_uint32 return_sensor_id(void)
 {
 	return ((read_cmos_sensor(0x3107) << 8) | read_cmos_sensor(0x3108)); //0xeb52
 }
@@ -748,13 +748,13 @@ static void normal_video_setting(kal_uint16 currefps)
 	preview_setting();
 }
 
-static void hs_video_setting()
+static void hs_video_setting(void)
 {
 	LOG_INF("E! VGA 120fps\n");    
 
 }
 
-static void slim_video_setting()
+static void slim_video_setting(void)
 {
 	LOG_INF("E! HD 30fps\n");
 

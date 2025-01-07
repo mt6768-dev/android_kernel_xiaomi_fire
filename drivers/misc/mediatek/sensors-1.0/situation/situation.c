@@ -155,7 +155,7 @@ int sar_data_report_t(int32_t value[8], int64_t time_stamp)
 	return err;
 }
 
-int sar_exception_data_report()
+int sar_exception_data_report(void)
 {
 	int err = 0, index = -1;
 	struct sensor_event event;
@@ -188,7 +188,7 @@ int sar_exception_data_report()
 }
 EXPORT_SYMBOL(sar_exception_data_report);
 
-int sar_algo_exception_data_report()
+int sar_algo_exception_data_report(void)
 {
 	int err = 0, index = -1;
 	struct sensor_event event;
@@ -214,7 +214,7 @@ int sar_algo_exception_data_report()
 }
 EXPORT_SYMBOL(sar_algo_exception_data_report);
 
-int sar_algo_top_exception_data_report()
+int sar_algo_top_exception_data_report(void)
 {
 	int err = 0, index = -1;
 	struct sensor_event event;
