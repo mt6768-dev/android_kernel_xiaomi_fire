@@ -76,13 +76,6 @@ extern int fts_tp_data_dump_proc_init(void);
 extern void fts_tp_data_dump_proc_exit(void);
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-int enter_palm_mode(struct fts_ts_data *data);
-int fts_palm_sensor_write(int value);
-static int fts_get_mode_cur_value(int mode);
-int fts_palm_sensor_cmd(int on);
-#endif
-
 static struct work_struct fts_charger_detect_work;
 static struct workqueue_struct *fts_charger_detect_workqueue;
 int fts_charger_flag;
@@ -103,15 +96,6 @@ static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
 extern int fts_proc_node_init(void);
 extern int fts_enter_proximity_mode(int mode);
-
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-static struct xiaomi_touch_interface xiaomi_touch_interfaces;
-static int fts_get_mode_value(int mode, int value_type);
-static int fts_get_mode_all(int mode, int *value);
-static int fts_reset_mode(int mode);
-static int fts_set_cur_value(int fts_mode, int fts_value);
-static void fts_init_touchmode_data(void);
-#endif
 
 void fts_charger_mode_notifier_callback(struct work_struct *work)
 {
@@ -979,7 +963,6 @@ static int fts_irq_read_report(struct fts_ts_data *ts_data)
         FTS_INFO("unknown touch event(%d)", touch_etype);
         break;
     }
-    enter_palm_mode(ts_data);
 
     return 0;
 }
@@ -1079,22 +1062,6 @@ static int fts_input_pen_init(struct fts_ts_data *ts_data)
     return 0;
 }
 #endif
-
-int enter_palm_mode(struct fts_ts_data *data)
-{
-	u8 mode0 = 0;
-	u8 mode1 = 0;
-	fts_read_reg(0x9A, &mode0);
-	fts_read_reg(0x9B, &mode1);
-	if (0x01 == mode0 && 0x00 == mode1) {
-        FTS_INFO("get packet palm off event.\n");
-		update_palm_sensor_value(0);
-	} else if (0x01 == mode0 && 0x01 == mode1) {
-		FTS_INFO("get packet palm on event.\n");
-		update_palm_sensor_value(1);
-	}
-	return 0;
-}
 
 static int fts_input_init(struct fts_ts_data *ts_data)
 {
@@ -2014,20 +1981,6 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
     register_early_suspend(&ts_data->early_suspend);
 #endif
 
-/* 2023.2.27 wingtech houzhengchuang add (xiaomi game mode) start */
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	memset(&xiaomi_touch_interfaces, 0x00, sizeof(struct xiaomi_touch_interface));
-	xiaomi_touch_interfaces.palm_sensor_write = fts_palm_sensor_write;
-	xiaomi_touch_interfaces.setModeValue = fts_set_cur_value;
-	xiaomi_touch_interfaces.getModeValue = fts_get_mode_value;
-	xiaomi_touch_interfaces.getModeAll = fts_get_mode_all;
-	xiaomi_touch_interfaces.resetMode = fts_reset_mode;
-	xiaomi_touch_interfaces.getModeCurValue = fts_get_mode_cur_value;
-	xiaomitouch_register_modedata(&xiaomi_touch_interfaces);
-	fts_init_touchmode_data();
-#endif
-/* 2023.2.27 wingtech houzhengchuang add (xiaomi game mode ) end */
-
     fts_charger_detect_workqueue = create_singlethread_workqueue("fts_charger_detect");
 	INIT_WORK(&fts_charger_detect_work, fts_charger_mode_notifier_callback);
 
@@ -2196,14 +2149,6 @@ static int fts_ts_suspend(struct device *dev)
     }
 #endif
 */
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	if (fts_data->palm_sensor_switch) {
-		FTS_INFO("%s: palm sensor on status, switch to off\n", __func__);
-		update_palm_sensor_value(0);
-		fts_palm_sensor_cmd(0);
-		fts_data->palm_sensor_switch = false;
-	}
-#endif
 
     fts_esdcheck_suspend(ts_data);
 #if FTS_PSENSOR_ENABLE
@@ -2291,13 +2236,6 @@ static int fts_ts_resume(struct device *dev)
         fts_gesture_resume(ts_data);
     }
 
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	if (fts_data->palm_sensor_switch) {
-		FTS_INFO("%s: palm sensor off status, switch to on\n", __func__);
-		fts_palm_sensor_cmd(ts_data->palm_sensor_switch);
-	}
-#endif
-
 	if (fts_charger_flag == TPD_DETECT_USB_IN) {
 		fts_write_reg(0x8B,0x01);
 		FTS_INFO("fts in charger mode\n");
@@ -2355,264 +2293,6 @@ static int fts_ps_enable_notifier_callback(struct notifier_block *self,
 	}
 	return 0;
 }
-
-/* 2023.2.27 wingtech houzhengchuang add (xiaomi game mode ) start */
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-
-static struct xiaomi_touch_interface xiaomi_touch_interfaces;
-int fts_palm_sensor_cmd(int on)
-{
-	int ret;
-	if (on) {
-		ret = fts_write_reg(0x9A, 0x01);
-	} else {
-		ret = fts_write_reg(0x9A, 0x00);
-	}
-	if (ret < 0) {
-		FTS_INFO("%s: write anti mis-touch cmd on...ERROR %08X !\n", __func__, ret);
-		return -EINVAL;
-	}
-	FTS_INFO("%s %d\n", __func__, on);
-	return 0;
-}
-
-int fts_palm_sensor_write(int value)
-{
-	int ret = 0;
-	if (value == 3) {
-		FTS_INFO("%s %d succeed\n", __func__, value);
-		update_palm_sensor_value(3);
-		return 0;
-	} else {
-		value = !!value;
-		fts_data->palm_sensor_switch = value;
-		ret = fts_palm_sensor_cmd(value);
-		if (!ret) {
-			FTS_INFO("%s %d succeed\n", __func__, value);
-		}
-	}
-	return ret;
-}
-
-static int fts_set_cur_value(int mode, int value)
-{
-     FTS_INFO("fts_set_cur_value mode = %d, value = %d\n", mode, value);
-	if (mode < Touch_Mode_NUM && mode >= 0) {
-		xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = value;
-		if (xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] > xiaomi_touch_interfaces.touch_mode[mode][GET_MAX_VALUE]) {
-			xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = xiaomi_touch_interfaces.touch_mode[mode][GET_MAX_VALUE];
-		} else if (xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] < xiaomi_touch_interfaces.touch_mode[mode][GET_MIN_VALUE]) {
-			xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = xiaomi_touch_interfaces.touch_mode[mode][GET_MIN_VALUE];
-		}
-        xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE] = value;
-        FTS_INFO("fts_set_cur_value mode = %d, value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-		if (mode == 0) {
-            FTS_INFO("fts_set_cur_value mode = %d, value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			if (value == 0) {
-				fts_write_reg(0X9D, 0X00);
-				fts_write_reg(0X9E, 0X03);
-				fts_write_reg(0X9C, 0X02);
-			} else {
-				fts_write_reg(0X9D, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-				fts_write_reg(0X9E, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-				fts_write_reg(0X9C, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			}
-		}
-		if (mode == 2) {
-            FTS_INFO("fts_set_cur_value mode = %d , value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			switch (xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]) {
-			case 0:
-				fts_write_reg(0x9D, 0x04);
-			break;
-			case 1:
-				fts_write_reg(0x9D, 0x03);
-			break;
-			case 2:
-				fts_write_reg(0x9D, 0x00);
-			break;
-			case 3:
-				fts_write_reg(0x9D, 0x01);
-			break;
-			case 4:
-				fts_write_reg(0x9D, 0x02);
-			break;
-			default:
-			FTS_INFO("%s,unknow value\n", __func__);
-			}
-		} else if (mode == 3) {
-            FTS_INFO("fts_set_cur_value mode = %d , value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			switch (xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]) {
-			case 0:
-				fts_write_reg(0x9E, 0x05);
-			break;
-			case 1:
-				fts_write_reg(0x9E, 0x04);
-			break;
-			case 2:
-				fts_write_reg(0x9E, 0x00);
-			break;
-			case 3:
-				fts_write_reg(0x9E, 0x01);
-			break;
-			case 4:
-				fts_write_reg(0x9E, 0x02);
-			break;
-			default:
-			FTS_INFO("%s,unknow value\n", __func__);
-			}
-		} else if (mode == 7) {
-			FTS_INFO("fts_set_cur_value mode = %d , value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			fts_write_reg(0X9C, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-		} else if (mode == 8) {
-			FTS_INFO("fts_set_cur_value mode = %d , value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-			switch (xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]) {
-			case 0:
-				fts_write_reg(0X8C, 0x00);
-				FTS_INFO("%s,write value = %d\n", __func__, 0);
-			break;
-			case 1:
-				fts_write_reg(0X8C, 0x01);
-				FTS_INFO("%s,write value = %d\n", __func__, 1);
-			break;
-			case 3:
-				fts_write_reg(0X8C, 0x02);
-				FTS_INFO("%s,write value = %d\n", __func__, 2);
-			break;
-			default:
-				FTS_INFO("%s,unknow value\n", __func__);
-			}
-		}
-	} else
-		FTS_INFO("%s,don't support\n", __func__);
-	return 0;
-}
-static int fts_get_mode_cur_value(int mode)
-{
-    uint8_t fwver = 0;
-	int ret = xiaomi_touch_interfaces.touch_mode[mode][GET_DEF_VALUE];;
-	if (mode < Touch_Mode_NUM && mode >= 0) {
-		if (mode == 2) {
-			fts_read_reg(0x9D, &fwver);
-			if (fwver == 0x04)
-				ret = 0;
-			else if (fwver == 0x03)
-				ret = 1;
-			else if (fwver == 0x00)
-				ret = 2;
-			else if (fwver == 0x01)
-				ret = 3;
-			else if (fwver == 0x02)
-				ret = 4;
-			else
-				ret = 0;
-		} else if (mode == 3) {
-			fts_read_reg(0x9E, &fwver);
-			if (fwver == 0x05)
-				ret = 0;
-			else if (fwver == 0x04)
-				ret = 1;
-			else if (fwver == 0x00)
-				ret = 2;
-			else if (fwver == 0x01)
-				ret = 3;
-			else if (fwver == 0x02)
-				ret = 4;
-			else
-				ret = 0;
-		} else if (mode == 7) {
-			fts_read_reg(0x9C, &fwver);
-			if (fwver == 0x00)
-				ret = 0;
-			else if (fwver == 0x01)
-				ret = 1;
-			else if (fwver == 0x02)
-				ret = 2;
-			else if (fwver == 0x03)
-				ret = 3;
-			else
-				ret = 0;
-		} else {
-			ret = 0;
-			FTS_INFO("%s,don't support\n", __func__);
-		}
-	} else
-		FTS_INFO("%s, mode %d don't support\n", __func__, mode);
-	return ret;
-}
-static void fts_init_touchmode_data(void)
-{
-	int i;
-	/* default value should equl the first initial value */
-	for (i = 0; i < Touch_Mode_NUM; i++) {
-		xiaomi_touch_interfaces.touch_mode[i][GET_DEF_VALUE] =
-			xiaomi_touch_interfaces.touch_mode[i][GET_CUR_VALUE];
-	}
-	/* Touch Game Mode Switch */
-	xiaomi_touch_interfaces.touch_mode[Touch_Game_Mode][GET_MAX_VALUE] = 1;
-	xiaomi_touch_interfaces.touch_mode[Touch_Game_Mode][GET_MIN_VALUE] = 0;
-	xiaomi_touch_interfaces.touch_mode[Touch_Game_Mode][GET_DEF_VALUE] = 1;
-	/* PF Mode */
-	xiaomi_touch_interfaces.touch_mode[Touch_Tolerance][GET_MAX_VALUE] = 4;
-	xiaomi_touch_interfaces.touch_mode[Touch_Tolerance][GET_MIN_VALUE] = 0;
-	xiaomi_touch_interfaces.touch_mode[Touch_Tolerance][GET_DEF_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_Tolerance][SET_CUR_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_Tolerance][GET_CUR_VALUE] = 2;
-	/*Touch_Sensitivity mode*/
-	xiaomi_touch_interfaces.touch_mode[Touch_UP_THRESHOLD][GET_MAX_VALUE] = 4;
-	xiaomi_touch_interfaces.touch_mode[Touch_UP_THRESHOLD][GET_MIN_VALUE] = 0;
-	xiaomi_touch_interfaces.touch_mode[Touch_UP_THRESHOLD][GET_DEF_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_UP_THRESHOLD][SET_CUR_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_UP_THRESHOLD][GET_CUR_VALUE] = 2;
-	/*Touch_ER_Range mode*/
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_MAX_VALUE] = 3;
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_MIN_VALUE] = 0;
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_DEF_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][SET_CUR_VALUE] = 2;
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_CUR_VALUE] = 2;
-}
-static int fts_get_mode_value(int mode, int value_type)
-{
-	int value = -1;
-	if (mode < Touch_Mode_NUM && mode >= 0) {
-		value = xiaomi_touch_interfaces.touch_mode[mode][value_type];
-        FTS_INFO("fts_get_mode_value mode = %d , value = %d\n", mode, xiaomi_touch_interfaces.touch_mode[mode][SET_CUR_VALUE]);
-	} else
-		FTS_INFO("%s ,don't support\n", __func__);
-	return value;
-}
-static int fts_get_mode_all(int mode, int *value)
-{
-	if (mode < Touch_Mode_NUM && mode >= 0) {
-		value[0] = xiaomi_touch_interfaces.touch_mode[mode][GET_CUR_VALUE];
-		value[1] = xiaomi_touch_interfaces.touch_mode[mode][GET_DEF_VALUE];
-		value[2] = xiaomi_touch_interfaces.touch_mode[mode][GET_MIN_VALUE];
-		value[3] = xiaomi_touch_interfaces.touch_mode[mode][GET_MAX_VALUE];
-	} else{
-		FTS_INFO("%s,don't support\n", __func__);
-	}
-	FTS_INFO("%s,mode:%d, value:%d:%d:%d:%d\n", __func__, mode, value[0],
-					value[1], value[2], value[3]);
-	return 0;
-}
-static int fts_reset_mode(int mode)
-{
-	if (mode < Touch_Mode_NUM && mode >= 0) {
-		if (mode == 0)
-			fts_set_cur_value(0, 0);
-		if (mode == 2)
-			fts_set_cur_value(2, 2);
-		else if (mode == 3)
-			fts_set_cur_value(3, 2);
-		else if (mode == 7)
-			fts_set_cur_value(7, 2);
-		else
-			FTS_INFO("%s,unknown value, mode = %d\n", __func__, mode);
-	} else
-		FTS_INFO("%s,don't support", __func__);
-	return 0;
-}
-#endif
-/* 2023.2.27 wingtech houzhengchuang add (xiaomi game mode) end */
 
 int fts_register_psenable_callback(void)
 {
