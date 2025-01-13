@@ -63,9 +63,6 @@
 #include <linux/dma-mapping.h>
 #include "focaltech_common.h"
 #include <linux/hardware_info.h>
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-#include "../xiaomi/xiaomi_touch.h"
-#endif
 
 /*****************************************************************************
 * Private constant and macro definitions using #define
@@ -239,10 +236,6 @@ struct fts_ts_data {
     int bus_type;
     struct regulator *vdd;
     struct regulator *vcc_i2c;
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-    bool palm_sensor_switch;
-    struct class *fts_tp_class;
-#endif
 #if FTS_PINCTRL_EN
     struct pinctrl *pinctrl;
     struct pinctrl_state *pins_active;
