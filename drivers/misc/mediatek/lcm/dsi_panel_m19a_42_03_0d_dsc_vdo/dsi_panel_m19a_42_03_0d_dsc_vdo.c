@@ -309,7 +309,7 @@ static void lcm_dfps_int(struct LCM_DSI_PARAMS *dsi)
 	dfps_params[1].level = DFPS_LEVEL1;
 	dfps_params[1].fps = 9000;/*real fps * 100, to support float*/
 	dfps_params[1].vact_timing_fps = 9000;/*real vact timing fps * 100*/
-	dfps_params[1].vertical_frontporch = 10;
+	dfps_params[1].vertical_frontporch = 18;
 	dfps_params[1].vertical_frontporch_for_low_power = 2200;
 
 	/* DPFS_LEVEL2 */
@@ -367,7 +367,7 @@ static void lcm_get_params(struct LCM_PARAMS *params)
 
 	params->dsi.vertical_sync_active = 10;
 	params->dsi.vertical_backporch = 20;
-	params->dsi.vertical_frontporch = 10;	//1248
+	params->dsi.vertical_frontporch = 18;
 	/*params->dsi.vertical_frontporch_for_low_power = 750;*/
 	params->dsi.vertical_active_line = FRAME_HEIGHT;
 
